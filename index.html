@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>加權指數策略模擬</title>
+  <meta name="description" content="以臺灣加權指數歷史行情逐日揭露，手動操作均線 + MACD 加減碼策略，並與策略自動交易結果對照。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='10' width='6' height='14' rx='1' fill='%23d6332f'/%3E%3Crect x='8.25' y='5' width='1.5' height='24' fill='%23d6332f'/%3E%3Crect x='20' y='6' width='6' height='12' rx='1' fill='%2311895a'/%3E%3Crect x='22.25' y='3' width='1.5' height='20' fill='%2311895a'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>加權指數策略模擬</h1>
+      <p>行情一天一天揭露，你來下單，和均線 + MACD 策略比一比</p>
+    </div>
+
+    <form id="settings" class="settings" novalidate>
+      <label class="field">
+        <span>起始日</span>
+        <input type="date" id="startDate" required>
+      </label>
+      <label class="field">
+        <span>結束日</span>
+        <input type="date" id="endDate" required>
+      </label>
+      <label class="field narrow">
+        <span>短均線</span>
+        <input type="number" id="maShort" step="1" inputmode="numeric" required>
+      </label>
+      <label class="field narrow">
+        <span>長均線</span>
+        <input type="number" id="maLong" step="1" inputmode="numeric" required>
+      </label>
+      <label class="field narrow">
+        <span>口數上限</span>
+        <input type="number" id="maxLots" step="1" inputmode="numeric" required>
+      </label>
+      <label class="field narrow">
+        <span>減碼 N 日</span>
+        <input type="number" id="reduceDays" step="1" inputmode="numeric" required>
+      </label>
+      <button type="submit" class="btn primary">以此設定開始</button>
+      <p id="settingsError" class="settings-error" role="alert"></p>
+    </form>
+
+    <button id="themeToggle" class="theme-toggle" type="button" aria-label="切換深色或淺色主題">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9A7 7 0 0 1 12 3Z"/></svg>
+    </button>
+  </header>
+
+  <main class="layout">
+    <section class="charts" aria-label="行情圖">
+      <div class="chart-box price-box">
+        <div class="legend" id="priceLegend" aria-live="off"></div>
+        <div id="priceChart" class="chart"></div>
+      </div>
+      <div class="chart-box macd-box">
+        <div class="legend" id="macdLegend" aria-live="off"></div>
+        <div id="macdChart" class="chart"></div>
+      </div>
+      <div class="chart-options">
+        <span class="key"><i class="swatch player"></i>你的交易</span>
+        <label class="check"><input type="checkbox" id="showStrategyMarkers" checked><i class="swatch strategy"></i>顯示策略的交易</label>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <section class="today" aria-label="今日行情">
+        <p class="today-count" id="dayCount"></p>
+        <p class="today-date" id="dayDate"></p>
+        <dl class="quote" id="quote"></dl>
+      </section>
+
+      <section class="rules" aria-labelledby="rulesTitle">
+        <div class="section-head">
+          <h2 id="rulesTitle">收盤判斷</h2>
+          <label class="check small"><input type="checkbox" id="showHints" checked>顯示策略提示</label>
+        </div>
+        <div id="rulesContent">
+          <p class="rules-basis" id="rulesBasis"></p>
+          <div id="rulesBody" class="rule-groups"></div>
+          <p class="verdict" id="verdict"></p>
+          <p class="rule-note" id="ruleNote" hidden></p>
+        </div>
+        <p class="rules-hidden" id="rulesHidden" hidden>策略提示已隱藏，請自行判斷。</p>
+      </section>
+
+      <section class="order" aria-labelledby="orderTitle">
+        <h2 id="orderTitle">明日開盤下單</h2>
+        <div class="actions" id="actions" role="radiogroup" aria-labelledby="orderTitle">
+          <button type="button" role="radio" data-action="long"><span class="label"></span><kbd>1</kbd></button>
+          <button type="button" role="radio" data-action="short"><span class="label"></span><kbd>2</kbd></button>
+          <button type="button" role="radio" data-action="reduce"><span class="label">減碼 1 口</span><kbd>3</kbd></button>
+          <button type="button" role="radio" data-action="close"><span class="label">全部平倉</span><kbd>4</kbd></button>
+          <button type="button" role="radio" data-action="none" class="wide"><span class="label">不動作</span><kbd>0</kbd></button>
+        </div>
+        <button type="button" id="followBtn" class="btn ghost follow">照策略建議 <kbd>F</kbd></button>
+        <p class="pending" id="pending"></p>
+        <div class="nav">
+          <button type="button" id="prevBtn" class="btn">上一天 <kbd>←</kbd></button>
+          <button type="button" id="nextBtn" class="btn primary next">下一天 <kbd>→</kbd></button>
+        </div>
+      </section>
+
+      <section class="accounts" aria-labelledby="accountsTitle">
+        <h2 id="accountsTitle" class="visually-hidden">部位與損益</h2>
+        <table class="account-table">
+          <thead>
+            <tr><th scope="col"></th><th scope="col"><i class="swatch player"></i>你</th><th scope="col"><i class="swatch strategy"></i>策略</th></tr>
+          </thead>
+          <tbody id="accountBody"></tbody>
+        </table>
+        <p class="unit">單位：點（點數 × 口數，不含交易成本）</p>
+      </section>
+    </aside>
+
+    <section class="records" aria-label="紀錄">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-daily" aria-controls="panel-daily" aria-selected="true">每日損益</button>
+        <button type="button" role="tab" id="tab-trades" aria-controls="panel-trades" aria-selected="false" tabindex="-1">交易紀錄</button>
+        <button type="button" role="tab" id="tab-equity" aria-controls="panel-equity" aria-selected="false" tabindex="-1">損益曲線</button>
+        <button type="button" role="tab" id="tab-rules" aria-controls="panel-rules" aria-selected="false" tabindex="-1">策略規則</button>
+      </div>
+
+      <div role="tabpanel" id="panel-daily" aria-labelledby="tab-daily" class="tab-panel">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th scope="col">日期</th><th scope="col">收盤</th>
+                <th scope="col">你的動作</th><th scope="col">你的部位</th><th scope="col">你的當日</th><th scope="col">你的累計</th>
+                <th scope="col">策略動作</th><th scope="col">策略部位</th><th scope="col">策略當日</th><th scope="col">策略累計</th>
+              </tr>
+            </thead>
+            <tbody id="dailyBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div role="tabpanel" id="panel-trades" aria-labelledby="tab-trades" class="tab-panel" hidden>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th scope="col">日期</th><th scope="col">帳戶</th><th scope="col">動作</th><th scope="col">成交價</th>
+                <th scope="col">口數</th><th scope="col">實現損益</th><th scope="col">成交後部位</th>
+              </tr>
+            </thead>
+            <tbody id="tradesBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div role="tabpanel" id="panel-equity" aria-labelledby="tab-equity" class="tab-panel" hidden>
+        <div class="equity-legend">
+          <span class="key"><i class="line player"></i>你</span>
+          <span class="key"><i class="line strategy"></i>策略</span>
+          <span class="muted">每日收盤的累計損益（點）</span>
+        </div>
+        <div id="equityChart" class="chart equity"></div>
+      </div>
+
+      <div role="tabpanel" id="panel-rules" aria-labelledby="tab-rules" class="tab-panel" hidden>
+        <ol class="rule-list" id="ruleList"></ol>
+        <p class="muted">MACD 參數固定為 12 / 26 / 9，柱狀體 = DIF − DEA。每天收盤後判斷，隔日開盤價成交。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>快捷鍵：<kbd>→</kbd> 或 <kbd>空白鍵</kbd> 下一天、<kbd>←</kbd> 上一天、<kbd>1</kbd>～<kbd>4</kbd>、<kbd>0</kbd> 選擇動作、<kbd>F</kbd> 照策略建議、<kbd>H</kbd> 顯示／隱藏策略提示</p>
+    <p>資料來源：臺灣證券交易所（加權指數日線，<span id="dataRange"></span>）。本專案僅供教學與展示，不構成任何投資建議。</p>
+    <p>圖表：<a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts™</a>，Copyright (с) 2025 TradingView, Inc.</p>
+  </footer>
+
+  <dialog id="summaryDialog" class="summary" aria-labelledby="summaryTitle">
+    <h2 id="summaryTitle">結算</h2>
+    <p class="summary-range" id="summaryRange"></p>
+    <p class="summary-headline" id="summaryHeadline"></p>
+    <table class="account-table summary-table">
+      <thead><tr><th scope="col"></th><th scope="col"><i class="swatch player"></i>你</th><th scope="col"><i class="swatch strategy"></i>策略</th></tr></thead>
+      <tbody id="summaryBody"></tbody>
+    </table>
+    <p class="unit">未平倉部位以最後一天收盤價計算。</p>
+    <div class="summary-actions">
+      <button type="button" class="btn" id="summaryBack">回到上一天</button>
+      <button type="button" class="btn primary" id="summaryRestart">重新開始</button>
+    </div>
+  </dialog>
+
+  <script src="vendor/lightweight-charts/lightweight-charts.standalone.production.js"></script>
+  <script src="data/taiex_data.js" charset="utf-8"></script>
+  <script src="js/indicators.js"></script>
+  <script src="js/strategy.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>

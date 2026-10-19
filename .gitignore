@@ -1,0 +1,20 @@
+# 資料庫與機密資訊不進版控
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+
+# 系統與編輯器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/

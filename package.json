@@ -1,0 +1,9 @@
+{
+  "name": "taiex-macd-game",
+  "version": "1.0.0",
+  "private": true,
+  "description": "臺灣加權指數均線 + MACD 加減碼策略的逐日模擬遊戲",
+  "scripts": {
+    "test": "node --test tests/strategy.test.js"
+  }
+}
