@@ -105,16 +105,30 @@
       return trade;
     }
 
-    clone() {
-      const copy = new Account(this.maxLots, this.direction);
-      copy.side = this.side;
-      copy.lots = [...this.lots];
-      copy.capIndex = this.capIndex;
-      copy.realized = this.realized;
-      copy.trades = this.trades.map((x) => ({ ...x }));
-      copy.roundTrips = this.roundTrips.map((x) => ({ ...x }));
-      copy.openTrip = this.openTrip ? { ...this.openTrip } : null;
-      return copy;
+    /**
+     * 記錄目前狀態供「上一天」還原。交易紀錄與完整回合只會往後新增、不會修改，
+     * 所以只記長度，還原時截斷即可，成本與已玩天數無關。
+     */
+    snapshot() {
+      return {
+        side: this.side,
+        lots: [...this.lots],
+        capIndex: this.capIndex,
+        realized: this.realized,
+        trades: this.trades.length,
+        roundTrips: this.roundTrips.length,
+        openTrip: this.openTrip ? { ...this.openTrip } : null,
+      };
+    }
+
+    restore(snap) {
+      this.side = snap.side;
+      this.lots = [...snap.lots];
+      this.capIndex = snap.capIndex;
+      this.realized = snap.realized;
+      this.trades.length = snap.trades;
+      this.roundTrips.length = snap.roundTrips;
+      this.openTrip = snap.openTrip ? { ...snap.openTrip } : null;
     }
   }
 
@@ -169,8 +183,8 @@
 
       this.history.push({
         t: this.t,
-        player: this.player.clone(),
-        strategy: this.strategy.clone(),
+        player: this.player.snapshot(),
+        strategy: this.strategy.snapshot(),
         rows: this.rows.length,
       });
 
@@ -187,8 +201,8 @@
       const snap = this.history.pop();
       if (!snap) return false;
       this.t = snap.t;
-      this.player = snap.player;
-      this.strategy = snap.strategy;
+      this.player.restore(snap.player);
+      this.strategy.restore(snap.strategy);
       this.rows.length = snap.rows;
       return true;
     }

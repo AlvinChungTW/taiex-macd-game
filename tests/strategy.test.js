@@ -211,6 +211,24 @@ test('真實資料：只作多時不會持有空單，只作空時不會持有�
   }
 });
 
+test('真實資料：連續多次回到前一天，帳戶狀態與交易紀錄完全還原', () => {
+  const bars = loadRealBars();
+  const market = Strategy.buildMarket(bars, PARAMS);
+  const game = new Game(market, PARAMS, market.minStartIndex, market.minStartIndex + 200);
+  const state = () =>
+    JSON.stringify({ t: game.t, p: game.player, s: game.strategy, rows: game.rows });
+  const saved = [];
+  while (!game.finished) {
+    saved.push(state());
+    game.step(game.coach().action);
+  }
+  for (let i = saved.length - 1; i >= 0; i--) {
+    assert.ok(game.undo());
+    assert.equal(state(), saved[i]);
+  }
+  assert.equal(game.undo(), false);
+});
+
 test('真實資料：回到前一天可還原狀態', () => {
   const bars = loadRealBars();
   const market = Strategy.buildMarket(bars, PARAMS);

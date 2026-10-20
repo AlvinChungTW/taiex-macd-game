@@ -85,6 +85,8 @@
     showHints: true,
     showStrategyMarkers: true,
     hoverIndex: null,
+    markers: [], // 目前 K 線上的交易標記（依時間排序）
+    markerCounts: { player: 0, strategy: 0 }, // 已轉成標記的交易筆數
   };
 
   // ---------- 主題 ----------
@@ -134,7 +136,7 @@
       /* 忽略 */
     }
     applyChartTheme();
-    render();
+    render({ full: true });
   }
 
   // ---------- 圖表 ----------
@@ -251,11 +253,25 @@
 
   const dateToIndex = new Map(bars.map((b, i) => [b.date, i]));
 
-  function lineData(values, upto) {
+  const candlePoint = (i) => {
+    const b = bars[i];
+    return { time: b.date, open: b.open, high: b.high, low: b.low, close: b.close };
+  };
+
+  const linePoint = (values, i) =>
+    values[i] === null ? { time: bars[i].date } : { time: bars[i].date, value: values[i] };
+
+  function histPoint(i, c) {
+    const h = state.market.hist[i];
+    if (h === null) return { time: bars[i].date };
+    const prev = state.market.hist[i - 1];
+    const weakening = prev !== null && prev !== undefined && Math.abs(h) < Math.abs(prev);
+    return { time: bars[i].date, value: h, color: withAlpha(h >= 0 ? c.up : c.down, weakening ? 0.45 : 0.9) };
+  }
+
+  function seriesData(point, upto) {
     const out = [];
-    for (let i = 0; i <= upto; i++) {
-      out.push(values[i] === null ? { time: bars[i].date } : { time: bars[i].date, value: values[i] });
-    }
+    for (let i = 0; i <= upto; i++) out.push(point(i));
     return out;
   }
 
@@ -276,33 +292,9 @@
     };
   }
 
-  function renderCharts(rescroll) {
-    const { game, market } = state;
-    const t = game.t;
-    const c = colors();
-    const prevRange = charts.price.timeScale().getVisibleLogicalRange();
-
-    charts.candles.setData(
-      bars.slice(0, t + 1).map((b) => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close }))
-    );
-    charts.maShort.setData(lineData(market.maShort, t));
-    charts.maLong.setData(lineData(market.maLong, t));
-    charts.dif.setData(lineData(market.dif, t));
-    charts.dea.setData(lineData(market.dea, t));
-
-    const hist = [];
-    for (let i = 0; i <= t; i++) {
-      const h = market.hist[i];
-      if (h === null) {
-        hist.push({ time: bars[i].date });
-        continue;
-      }
-      const prev = market.hist[i - 1];
-      const weakening = prev !== null && prev !== undefined && Math.abs(h) < Math.abs(prev);
-      hist.push({ time: bars[i].date, value: h, color: withAlpha(h >= 0 ? c.up : c.down, weakening ? 0.45 : 0.9) });
-    }
-    charts.hist.setData(hist);
-
+  /** 依目前交易紀錄重建全部 K 線標記 */
+  function rebuildMarkers(c = colors()) {
+    const { game } = state;
     const markers = [
       {
         time: bars[game.startIndex].date,
@@ -318,10 +310,58 @@
       for (const trade of game.strategy.trades) markers.push(markerFor(trade, 'strategy', c));
     }
     markers.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+    state.markers = markers;
+    state.markerCounts = { player: game.player.trades.length, strategy: game.strategy.trades.length };
     charts.candles.setMarkers(markers);
+  }
 
-    charts.eqPlayer.setData(game.rows.map((r) => ({ time: r.date, value: r.playerEquity })));
-    charts.eqStrategy.setData(game.rows.map((r) => ({ time: r.date, value: r.strategyEquity })));
+  /** 往後走一天時只附加新的交易標記；新交易一定是最新日期，加在尾端即維持排序 */
+  function appendMarkers(c) {
+    const { game } = state;
+    const fresh = game.player.trades.slice(state.markerCounts.player).map((t) => markerFor(t, 'player', c));
+    if (state.showStrategyMarkers) {
+      for (const t of game.strategy.trades.slice(state.markerCounts.strategy)) fresh.push(markerFor(t, 'strategy', c));
+    }
+    state.markerCounts = { player: game.player.trades.length, strategy: game.strategy.trades.length };
+    if (fresh.length) {
+      state.markers.push(...fresh);
+      charts.candles.setMarkers(state.markers);
+    }
+  }
+
+  /**
+   * full：重設全部資料（開新局、回到上一天、切換主題時）。
+   * 否則視為往後走了一天，只附加最新一根 K 棒與指標，成本與已玩天數無關。
+   */
+  function renderCharts({ full = false, rescroll = false } = {}) {
+    const { game, market } = state;
+    const t = game.t;
+    const c = colors();
+    const prevRange = charts.price.timeScale().getVisibleLogicalRange();
+    const equityPoint = (r, key) => ({ time: r.date, value: r[key] });
+
+    if (full) {
+      charts.candles.setData(seriesData(candlePoint, t));
+      charts.maShort.setData(seriesData((i) => linePoint(market.maShort, i), t));
+      charts.maLong.setData(seriesData((i) => linePoint(market.maLong, i), t));
+      charts.dif.setData(seriesData((i) => linePoint(market.dif, i), t));
+      charts.dea.setData(seriesData((i) => linePoint(market.dea, i), t));
+      charts.hist.setData(seriesData((i) => histPoint(i, c), t));
+      rebuildMarkers(c);
+      charts.eqPlayer.setData(game.rows.map((r) => equityPoint(r, 'playerEquity')));
+      charts.eqStrategy.setData(game.rows.map((r) => equityPoint(r, 'strategyEquity')));
+    } else {
+      charts.candles.update(candlePoint(t));
+      charts.maShort.update(linePoint(market.maShort, t));
+      charts.maLong.update(linePoint(market.maLong, t));
+      charts.dif.update(linePoint(market.dif, t));
+      charts.dea.update(linePoint(market.dea, t));
+      charts.hist.update(histPoint(t, c));
+      appendMarkers(c);
+      const last = game.rows[game.rows.length - 1];
+      charts.eqPlayer.update(equityPoint(last, 'playerEquity'));
+      charts.eqStrategy.update(equityPoint(last, 'strategyEquity'));
+    }
     charts.equity.timeScale().fitContent();
 
     // 保持目前的縮放比例，並讓最新一天固定在右側
@@ -471,57 +511,83 @@
   }
 
   // ---------- 紀錄分頁 ----------
-  function renderDaily() {
-    const rows = state.game.rows;
-    const tr = [];
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const r = rows[i];
-      const first = i === 0;
-      tr.push(
-        el('tr', {}, [
-          el('td', { class: 'text', text: r.date }),
-          el('td', { text: fmtPrice(r.close) }),
-          el('td', { class: 'text', text: first ? '起始日' : tradeText(r.playerTrade) }),
-          el('td', { class: 'text', text: fmtPosition(r.playerPosition) }),
-          el('td', { class: signClass(r.playerDaily), text: fmtSigned(r.playerDaily) }),
-          el('td', { class: signClass(r.playerEquity), text: fmtSigned(r.playerEquity) }),
-          el('td', { class: 'text', text: first ? '起始日' : tradeText(r.strategyTrade) }),
-          el('td', { class: 'text', text: fmtPosition(r.strategyPosition) }),
-          el('td', { class: signClass(r.strategyDaily), text: fmtSigned(r.strategyDaily) }),
-          el('td', { class: signClass(r.strategyEquity), text: fmtSigned(r.strategyEquity) }),
-        ])
-      );
-    }
-    $('dailyBody').replaceChildren(...tr);
+  // 兩張表都是最新的在最上方。往後走一天只在頂端插入新列，回到上一天只移除頂端的列，
+  // 不重畫整張表；rendered 記錄目前畫面上已有幾筆。
+  const rendered = { daily: 0, player: 0, strategy: 0 };
+
+  function resetRecords() {
+    $('dailyBody').replaceChildren();
+    $('tradesBody').replaceChildren();
+    Object.assign(rendered, { daily: 0, player: 0, strategy: 0 });
   }
 
-  function renderTrades() {
-    const { game } = state;
-    const all = [
-      ...game.player.trades.map((t, i) => ({ ...t, who: '你', order: 0, seq: i })),
-      ...game.strategy.trades.map((t, i) => ({ ...t, who: '策略', order: 1, seq: i })),
-    ].sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.order - b.order || b.seq - a.seq));
+  function dailyRow(r, first) {
+    return el('tr', {}, [
+      el('td', { class: 'text', text: r.date }),
+      el('td', { text: fmtPrice(r.close) }),
+      el('td', { class: 'text', text: first ? '起始日' : tradeText(r.playerTrade) }),
+      el('td', { class: 'text', text: fmtPosition(r.playerPosition) }),
+      el('td', { class: signClass(r.playerDaily), text: fmtSigned(r.playerDaily) }),
+      el('td', { class: signClass(r.playerEquity), text: fmtSigned(r.playerEquity) }),
+      el('td', { class: 'text', text: first ? '起始日' : tradeText(r.strategyTrade) }),
+      el('td', { class: 'text', text: fmtPosition(r.strategyPosition) }),
+      el('td', { class: signClass(r.strategyDaily), text: fmtSigned(r.strategyDaily) }),
+      el('td', { class: signClass(r.strategyEquity), text: fmtSigned(r.strategyEquity) }),
+    ]);
+  }
 
-    if (all.length === 0) {
-      $('tradesBody').replaceChildren(
+  function syncDaily() {
+    const body = $('dailyBody');
+    const rows = state.game.rows;
+    while (rendered.daily > rows.length) {
+      body.firstElementChild.remove();
+      rendered.daily--;
+    }
+    while (rendered.daily < rows.length) {
+      body.prepend(dailyRow(rows[rendered.daily], rendered.daily === 0));
+      rendered.daily++;
+    }
+  }
+
+  function tradeRow(t, who) {
+    const closing = t.action === Action.REDUCE || t.action === Action.CLOSE;
+    return el('tr', {}, [
+      el('td', { class: 'text', text: t.date }),
+      el('td', { class: 'text', text: who }),
+      el('td', { class: 'text', text: tradeText(t) }),
+      el('td', { text: fmtPrice(t.price) }),
+      el('td', { text: String(t.count) }),
+      el('td', { class: closing ? signClass(t.pnl) : '', text: closing ? fmtSigned(t.pnl) : '—' }),
+      el('td', { class: 'text', text: fmtPosition(t.positionAfter) }),
+    ]);
+  }
+
+  function syncTrades() {
+    const body = $('tradesBody');
+    const { player, strategy } = state.game;
+    body.querySelector('tr.empty')?.remove();
+
+    // 回到上一天：被還原的交易都是最新日期，位在最上方
+    const removed =
+      Math.max(0, rendered.player - player.trades.length) + Math.max(0, rendered.strategy - strategy.trades.length);
+    for (let i = 0; i < removed; i++) body.firstElementChild.remove();
+    rendered.player = Math.min(rendered.player, player.trades.length);
+    rendered.strategy = Math.min(rendered.strategy, strategy.trades.length);
+
+    // 往後走一天：新交易同一天，玩家在前，插在最上方
+    const fresh = [
+      ...player.trades.slice(rendered.player).map((t) => tradeRow(t, '你')),
+      ...strategy.trades.slice(rendered.strategy).map((t) => tradeRow(t, '策略')),
+    ];
+    if (fresh.length) body.prepend(...fresh);
+    rendered.player = player.trades.length;
+    rendered.strategy = strategy.trades.length;
+
+    if (!body.firstElementChild) {
+      body.append(
         el('tr', { class: 'empty' }, [el('td', { colspan: '7', text: '還沒有任何交易。選擇明日動作後按「下一天」。' })])
       );
-      return;
     }
-    $('tradesBody').replaceChildren(
-      ...all.map((t) => {
-        const closing = t.action === Action.REDUCE || t.action === Action.CLOSE;
-        return el('tr', {}, [
-          el('td', { class: 'text', text: t.date }),
-          el('td', { class: 'text', text: t.who }),
-          el('td', { class: 'text', text: tradeText(t) }),
-          el('td', { text: fmtPrice(t.price) }),
-          el('td', { text: String(t.count) }),
-          el('td', { class: closing ? signClass(t.pnl) : '', text: closing ? fmtSigned(t.pnl) : '—' }),
-          el('td', { class: 'text', text: fmtPosition(t.positionAfter) }),
-        ]);
-      })
-    );
   }
 
   function renderRuleList() {
@@ -579,15 +645,16 @@
   }
 
   // ---------- 流程 ----------
-  function render(rescroll = false) {
-    renderCharts(rescroll);
+  /** opts 同 renderCharts：預設為「往後走了一天」的增量更新 */
+  function render(opts = {}) {
+    renderCharts(opts);
     renderLegends();
     renderToday();
     renderRules();
     renderOrder();
     renderAccounts();
-    renderDaily();
-    renderTrades();
+    syncDaily();
+    syncTrades();
   }
 
   function selectAction(action) {
@@ -611,7 +678,7 @@
   function prevDay() {
     if (state.game.undo()) {
       state.selected = Action.NONE;
-      render();
+      render({ full: true });
     }
   }
 
@@ -623,7 +690,8 @@
     state.hoverIndex = null;
     $('envDirection').textContent = Strategy.DIRECTION_LABELS[params.direction];
     renderRuleList();
-    render(true);
+    resetRecords();
+    render({ full: true, rescroll: true });
   }
 
   // ---------- 設定表單 ----------
@@ -758,7 +826,7 @@
     });
     $('showStrategyMarkers').addEventListener('change', (e) => {
       state.showStrategyMarkers = e.target.checked;
-      renderCharts(false);
+      rebuildMarkers();
     });
     $('themeToggle').addEventListener('click', toggleTheme);
     $('summaryBack').addEventListener('click', () => {
@@ -810,6 +878,6 @@
   // 系統主題改變時同步圖表顏色
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     applyChartTheme();
-    render();
+    render({ full: true });
   });
 })();
