@@ -71,8 +71,10 @@ taiex-macd-game/
 │   ├── strategy.js     策略規則引擎
 │   ├── game.js         帳戶（FIFO 部位）與遊戲流程
 │   └── ui.js           圖表、面板、快捷鍵
-├── data/taiex_data.js  加權指數日線資料（由 tools/export_taiex.py 產生）
-├── tools/export_taiex.py
+├── data/taiex_data.js  加權指數日線資料（由 tools/ 的工具產生）
+├── tools/
+│   ├── fetch_twse.py   從證交所網站抓取日線
+│   └── export_taiex.py 從本機 SQLite 資料庫匯出
 ├── tests/strategy.test.js
 └── vendor/lightweight-charts/
 ```
@@ -89,13 +91,25 @@ npm test
 
 ## 更新行情資料
 
-資料來自本機的 SQLite 資料庫（`TAIEX` 資料表，欄位含 `id`、`open`、`high`、`low`、`close`）。資料庫不放進這個 repo，更新後執行：
+目前資料為 2016-01-04 起的加權指數日線，取自[證交所「發行量加權股價指數歷史資料」](https://www.twse.com.tw/zh/indices/taiex/mi-5min-hist.html)。補抓最新資料：
+
+```bash
+py tools/fetch_twse.py
+```
+
+會從現有資料的最後一個月抓到本月，合併後重新產生 `data/taiex_data.js`，提交後 GitHub Pages 會自動更新。重新抓取指定區間：
+
+```bash
+py tools/fetch_twse.py --start 2016-01 --end 2026-10 --until 2026-10-19 --replace
+```
+
+證交所會封鎖請求過於頻繁的 IP，工具預設每次請求間隔 3.5 秒（每個月份一次請求）。
+
+也可以改從本機的 SQLite 資料庫匯出（`TAIEX` 資料表，欄位含 `id`、`open`、`high`、`low`、`close`；資料庫不放進這個 repo）：
 
 ```bash
 py tools/export_taiex.py <stock.db 的路徑>
 ```
-
-會重新產生 `data/taiex_data.js`，提交後 GitHub Pages 會自動更新。
 
 ## 部署到 GitHub Pages
 
