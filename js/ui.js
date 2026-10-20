@@ -84,6 +84,7 @@
     selected: Action.NONE,
     showHints: true,
     showStrategyMarkers: true,
+    showRefMa: { ma60: false, ma120: false }, // 參考均線預設不顯示
     hoverIndex: null,
     markers: [], // 目前 K 線上的交易標記（依時間排序）
     markerCounts: { player: 0, strategy: 0 }, // 已轉成標記的交易筆數
@@ -110,6 +111,8 @@
       down: cssVar('--down'),
       maShort: cssVar('--ma-short'),
       maLong: cssVar('--ma-long'),
+      ma60: cssVar('--ma-60'),
+      ma120: cssVar('--ma-120'),
       player: cssVar('--player'),
       strategy: cssVar('--strategy'),
     };
@@ -172,6 +175,10 @@
 
     charts.price = LWC.createChart($('priceChart'), baseChartOptions(c, { timeScale: { visible: false } }));
     charts.candles = charts.price.addCandlestickSeries({ priceLineVisible: false });
+    // 參考用的長天期均線，預設隱藏，畫在策略均線下層
+    for (const key of Object.keys(REF_MA)) {
+      charts[key] = charts.price.addLineSeries({ ...lineOpts, visible: state.showRefMa[key] });
+    }
     charts.maShort = charts.price.addLineSeries(lineOpts);
     charts.maLong = charts.price.addLineSeries(lineOpts);
 
@@ -244,6 +251,7 @@
     });
     charts.maShort.applyOptions({ color: c.maShort });
     charts.maLong.applyOptions({ color: c.maLong });
+    for (const key of Object.keys(REF_MA)) charts[key].applyOptions({ color: c[key] });
     charts.dif.applyOptions({ color: c.maShort });
     charts.dea.applyOptions({ color: c.maLong });
     charts.eqPlayer.applyOptions({ color: c.player });
@@ -252,6 +260,12 @@
   }
 
   const dateToIndex = new Map(bars.map((b, i) => [b.date, i]));
+
+  /** 參考用的長天期均線：只供看盤，不影響策略，天數固定 */
+  const REF_MA = Object.freeze({ ma60: 60, ma120: 120 });
+  const refMaValues = Object.fromEntries(
+    Object.entries(REF_MA).map(([key, days]) => [key, Indicators.sma(bars.map((b) => b.close), days)])
+  );
 
   const candlePoint = (i) => {
     const b = bars[i];
@@ -344,6 +358,7 @@
       charts.candles.setData(seriesData(candlePoint, t));
       charts.maShort.setData(seriesData((i) => linePoint(market.maShort, i), t));
       charts.maLong.setData(seriesData((i) => linePoint(market.maLong, i), t));
+      for (const key of Object.keys(REF_MA)) charts[key].setData(seriesData((i) => linePoint(refMaValues[key], i), t));
       charts.dif.setData(seriesData((i) => linePoint(market.dif, i), t));
       charts.dea.setData(seriesData((i) => linePoint(market.dea, i), t));
       charts.hist.setData(seriesData((i) => histPoint(i, c), t));
@@ -354,6 +369,7 @@
       charts.candles.update(candlePoint(t));
       charts.maShort.update(linePoint(market.maShort, t));
       charts.maLong.update(linePoint(market.maLong, t));
+      for (const key of Object.keys(REF_MA)) charts[key].update(linePoint(refMaValues[key], t));
       charts.dif.update(linePoint(market.dif, t));
       charts.dea.update(linePoint(market.dea, t));
       charts.hist.update(histPoint(t, c));
@@ -390,7 +406,10 @@
       legendItem(b.date, '', null),
       legendItem('收', fmtPrice(b.close)),
       legendItem(`${params.maShort}MA`, fmtPrice(market.maShort[i]), 'ma-short'),
-      legendItem(`${params.maLong}MA`, fmtPrice(market.maLong[i]), 'ma-long')
+      legendItem(`${params.maLong}MA`, fmtPrice(market.maLong[i]), 'ma-long'),
+      ...Object.entries(REF_MA)
+        .filter(([key]) => state.showRefMa[key])
+        .map(([key, days]) => legendItem(`${days}MA`, fmtPrice(refMaValues[key][i]), `ma-${days}`))
     );
     $('macdLegend').replaceChildren(
       legendItem('MACD 12, 26, 9', '', null),
@@ -824,6 +843,16 @@
       renderRules();
       renderOrder();
     });
+    // 重新整理時瀏覽器可能還原勾選狀態，先與程式狀態同步
+    $('showStrategyMarkers').checked = state.showStrategyMarkers;
+    for (const [key, days] of Object.entries(REF_MA)) {
+      $(`showMa${days}`).checked = state.showRefMa[key];
+      $(`showMa${days}`).addEventListener('change', (e) => {
+        state.showRefMa[key] = e.target.checked;
+        charts[key].applyOptions({ visible: e.target.checked });
+        renderLegends();
+      });
+    }
     $('showStrategyMarkers').addEventListener('change', (e) => {
       state.showStrategyMarkers = e.target.checked;
       rebuildMarkers();

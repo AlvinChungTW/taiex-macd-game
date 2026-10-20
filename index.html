@@ -62,6 +62,11 @@
 
   <main class="layout">
     <section class="charts" aria-label="行情圖">
+      <div class="chart-toolbar">
+        <span class="toolbar-label">顯示均線</span>
+        <label class="check"><input type="checkbox" id="showMa60"><i class="swatch ma-60"></i>60MA</label>
+        <label class="check"><input type="checkbox" id="showMa120"><i class="swatch ma-120"></i>120MA</label>
+      </div>
       <div class="chart-box price-box">
         <div class="legend" id="priceLegend" aria-live="off"></div>
         <div id="priceChart" class="chart"></div>

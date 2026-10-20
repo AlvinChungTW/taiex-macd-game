@@ -16,6 +16,8 @@
   --down: #11895a;    /* 綠跌 */
   --ma-short: #2a78d6;
   --ma-long: #eb6834;
+  --ma-60: #eda100;
+  --ma-120: #e87ba4;
   --player: #6250d6;
   --strategy: #6b6a66;
   --focus: #2f47b5;
@@ -44,6 +46,8 @@
     --down: #26a269;
     --ma-short: #3987e5;
     --ma-long: #d95926;
+    --ma-60: #c98500;
+    --ma-120: #d55181;
     --player: #9085e9;
     --strategy: #b9b8b0;
     --focus: #8091ff;
@@ -67,6 +71,8 @@
   --down: #26a269;
   --ma-short: #3987e5;
   --ma-long: #d95926;
+  --ma-60: #c98500;
+  --ma-120: #d55181;
   --player: #9085e9;
   --strategy: #b9b8b0;
   --focus: #8091ff;
@@ -259,6 +265,15 @@ kbd {
 .swatch.strategy { background: var(--strategy); }
 .swatch.ma-short { background: var(--ma-short); border-radius: 2px; height: 3px; width: 14px; }
 .swatch.ma-long { background: var(--ma-long); border-radius: 2px; height: 3px; width: 14px; }
+.swatch.ma-60 { background: var(--ma-60); border-radius: 2px; height: 3px; width: 14px; }
+.swatch.ma-120 { background: var(--ma-120); border-radius: 2px; height: 3px; width: 14px; }
+
+.chart-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem;
+  padding: 0 0.25rem 0.5rem;
+  font-size: 0.875rem; color: var(--ink-2);
+}
+.toolbar-label { color: var(--muted); }
 
 .line { display: inline-block; width: 18px; height: 0; border-top: 2px solid; }
 .line.player { border-color: var(--player); }
