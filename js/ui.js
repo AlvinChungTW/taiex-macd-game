@@ -525,16 +525,21 @@
   }
 
   function renderRuleList() {
-    const { maShort: s, maLong: l, maxLots: cap, reduceDays: n } = state.params;
+    const { maShort: s, maLong: l, maxLots: cap, reduceDays: n, direction } = state.params;
+    const scope = {
+      both: '多單、空單都做（同一時間只持有單一方向）',
+      long: '本局只作多單',
+      short: '本局只作空單',
+    }[direction];
     const rules = [
-      `同時間最多持有 ${cap} 口，多單、空單都做（同一時間只持有單一方向）。`,
+      `同時間最多持有 ${cap} 口，${scope}。`,
       `多單進場：收盤時 ${s}MA 在 ${l}MA 之上，且 MACD 柱狀圖大於昨日，隔日開盤做多 1 口。`,
       `多單加碼：持有多單且未滿 ${cap} 口時，收盤柱狀圖大於前一日，隔日加碼 1 口。`,
-      `減碼：持有 ${cap} 口時，若收盤柱狀圖未突破前 ${n} 日最高值，隔日減碼 1 口（先平最早進場的一口）。`,
+      `減碼：加到第 ${cap} 口的那根 K 棒算第 1 根，前 ${n} 根為保護期、不檢查減碼；第 ${n + 1} 根收盤起，若柱狀圖未突破前 ${n} 日最高值，隔日減碼 1 口（先平最早進場的一口）。因此滿 ${cap} 口後至少持有 ${n + 1} 根 K 棒。`,
       `減碼只在滿 ${cap} 口時才檢查，未滿上限不減碼。`,
-      '減碼後若符合加碼條件，照樣再加碼。',
-      `多單出場：收盤時 ${s}MA 跌破 ${l}MA，隔日全部平倉。`,
-      `空單規則與多單相反：${s}MA 在 ${l}MA 之下且柱狀圖小於昨日時進場；柱狀圖小於前一日時加碼；滿 ${cap} 口且柱狀圖未跌破前 ${n} 日最低值時減碼；${s}MA 突破 ${l}MA 時出場。`,
+      `減碼後若符合加碼條件，照樣再加碼；再次加到 ${cap} 口時，保護期重新計算。`,
+      `多單出場：收盤時 ${s}MA 跌破 ${l}MA，隔日全部平倉（保護期內也一樣）。`,
+      `空單規則與多單相反：${s}MA 在 ${l}MA 之下且柱狀圖小於昨日時進場；柱狀圖小於前一日時加碼；滿 ${cap} 口且過了保護期後，柱狀圖未跌破前 ${n} 日最低值時減碼；${s}MA 突破 ${l}MA 時出場。`,
       '出場當日即使符合反向進場條件，也只平倉、不反手，隔日收盤再重新判斷。同一天有多個訊號時，優先序為出場、減碼、加碼。',
     ];
     $('ruleList').replaceChildren(...rules.map((text) => el('li', { text })));
@@ -546,7 +551,9 @@
     const sum = game.summary();
     const p = sum.player;
     const s = sum.strategy;
-    $('summaryRange').textContent = `${bars[game.startIndex].date} 至 ${bars[game.endIndex].date}，共 ${game.totalDays} 個交易日`;
+    $('summaryRange').textContent =
+      `${bars[game.startIndex].date} 至 ${bars[game.endIndex].date}，共 ${game.totalDays} 個交易日，` +
+      Strategy.DIRECTION_LABELS[state.params.direction];
     const diff = p.total - s.total;
     $('summaryHeadline').textContent =
       Math.abs(diff) < 0.005
@@ -614,6 +621,7 @@
     state.game = new Game(state.market, params, startIndex, endIndex);
     state.selected = Action.NONE;
     state.hoverIndex = null;
+    $('envDirection').textContent = Strategy.DIRECTION_LABELS[params.direction];
     renderRuleList();
     render(true);
   }
@@ -627,6 +635,8 @@
       const raw = $(id).value.trim();
       params[id] = /^\d{1,4}$/.test(raw) ? Number(raw) : NaN;
     }
+    const checked = document.querySelector('input[name="direction"]:checked');
+    params.direction = checked ? checked.value : null;
     return params;
   }
 
@@ -645,6 +655,9 @@
       input.max = Strategy.LIMITS[id].max;
       input.value = d[id];
       input.addEventListener('input', updateDateLimits);
+    }
+    for (const radio of document.querySelectorAll('input[name="direction"]')) {
+      radio.checked = radio.value === d.direction;
     }
     const minIdx = Strategy.minStartIndex(d);
     const startIdx = Math.max(minIdx, lastIndex - 119);

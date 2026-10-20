@@ -13,10 +13,12 @@
 
   /** 單一交易帳戶：部位以先進先出（FIFO）管理每一口的進場價 */
   class Account {
-    constructor(maxLots) {
+    constructor(maxLots, direction = Strategy.Direction.BOTH) {
       this.maxLots = maxLots;
+      this.direction = direction;
       this.side = 0; // 1 多、-1 空、0 空手
       this.lots = []; // 每一口的進場價
+      this.capIndex = null; // 部位加到上限的那根 K 棒索引，未滿上限時為 null
       this.realized = 0;
       this.trades = [];
       this.roundTrips = [];
@@ -48,9 +50,9 @@
         case Action.NONE:
           return true;
         case Action.LONG:
-          return this.side >= 0 && this.size < this.maxLots;
+          return this.direction !== Strategy.Direction.SHORT && this.side >= 0 && this.size < this.maxLots;
         case Action.SHORT:
-          return this.side <= 0 && this.size < this.maxLots;
+          return this.direction !== Strategy.Direction.LONG && this.side <= 0 && this.size < this.maxLots;
         case Action.REDUCE:
         case Action.CLOSE:
           return this.size > 0;
@@ -59,8 +61,8 @@
       }
     }
 
-    /** 以指定價格執行動作，回傳成交紀錄（不動作時回傳 null） */
-    apply(action, price, date) {
+    /** 以指定價格執行動作（index 為成交那根 K 棒的索引），回傳成交紀錄（不動作時回傳 null） */
+    apply(action, price, date, index = null) {
       if (action === Action.NONE) return null;
       if (!this.canApply(action)) throw new Error(`目前部位無法執行：${action}`);
 
@@ -72,6 +74,7 @@
         }
         this.side = side;
         this.lots.push(price);
+        if (this.size === this.maxLots) this.capIndex = index;
         this.openTrip.maxLots = Math.max(this.openTrip.maxLots, this.size);
         return this._record(date, action, opening ? '進場' : '加碼', price, 1, 0);
       }
@@ -81,6 +84,7 @@
       let pnl = 0;
       for (let i = 0; i < count; i++) pnl += (price - this.lots.shift()) * side;
       this.realized += pnl;
+      this.capIndex = null;
       const kind = this.size === 0 ? '平倉' : '減碼';
       const trade = this._record(date, action, kind, price, count, pnl, side);
       if (this.size === 0) {
@@ -102,9 +106,10 @@
     }
 
     clone() {
-      const copy = new Account(this.maxLots);
+      const copy = new Account(this.maxLots, this.direction);
       copy.side = this.side;
       copy.lots = [...this.lots];
+      copy.capIndex = this.capIndex;
       copy.realized = this.realized;
       copy.trades = this.trades.map((x) => ({ ...x }));
       copy.roundTrips = this.roundTrips.map((x) => ({ ...x }));
@@ -123,8 +128,8 @@
       this.startIndex = startIndex;
       this.endIndex = endIndex;
       this.t = startIndex;
-      this.player = new Account(params.maxLots);
-      this.strategy = new Account(params.maxLots);
+      this.player = new Account(params.maxLots, params.direction);
+      this.strategy = new Account(params.maxLots, params.direction);
       this.rows = [this._row(null, null)];
       this.history = [];
     }
@@ -147,12 +152,14 @@
 
     /** 依策略規則，以玩家目前部位判斷明日動作（策略提示） */
     coach() {
-      return Strategy.evaluate(this.market, this.t, this.player.position, this.params);
+      const p = this.player;
+      return Strategy.evaluate(this.market, this.t, p.position, this.params, p.capIndex);
     }
 
     /** 策略對照組帳戶的明日動作 */
     strategyDecision() {
-      return Strategy.evaluate(this.market, this.t, this.strategy.position, this.params);
+      const s = this.strategy;
+      return Strategy.evaluate(this.market, this.t, s.position, this.params, s.capIndex);
     }
 
     /** 推進一天：以隔日開盤價執行玩家與策略的動作 */
@@ -170,8 +177,8 @@
       const strategyAction = this.strategyDecision().action;
       this.t += 1;
       const { date, open } = this.bar;
-      const playerTrade = this.player.apply(playerAction, open, date);
-      const strategyTrade = this.strategy.apply(strategyAction, open, date);
+      const playerTrade = this.player.apply(playerAction, open, date, this.t);
+      const strategyTrade = this.strategy.apply(strategyAction, open, date, this.t);
       this.rows.push(this._row(playerTrade, strategyTrade));
     }
 

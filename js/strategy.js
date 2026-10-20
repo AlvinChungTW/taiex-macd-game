@@ -8,9 +8,11 @@
  *   進場：短均線 > 長均線，且 MACD 柱狀圖 > 昨日          → 隔日多單 1 口
  *   加碼：持有多單且未達口數上限，柱狀圖 > 前一日          → 隔日加碼 1 口
  *   減碼：達口數上限時，柱狀圖未突破前 N 日最高值          → 隔日減碼 1 口
+ *         加到上限那根 K 棒算第 1 根，前 N 根為保護期不檢查，第 N+1 根收盤起才檢查
  *   出場：短均線 < 長均線                                  → 隔日全部平倉
  *   同日多個訊號時優先序：出場 > 減碼 > 加碼。
  *   出場當日即使符合反向進場條件也只平倉，隔日收盤再重新判斷。
+ *   交易方向可設定為只作多、只作空或多空均作，未開放的方向不進場。
  */
 (function (root) {
   'use strict';
@@ -37,7 +39,19 @@
     reduceDays: { min: 1, max: 10 },
   });
 
-  const DEFAULT_PARAMS = Object.freeze({ maShort: 5, maLong: 20, maxLots: 3, reduceDays: 3 });
+  const Direction = Object.freeze({ BOTH: 'both', LONG: 'long', SHORT: 'short' });
+  const DIRECTION_LABELS = Object.freeze({ both: '多空均作', long: '作多', short: '作空' });
+
+  const DEFAULT_PARAMS = Object.freeze({
+    maShort: 5,
+    maLong: 20,
+    maxLots: 3,
+    reduceDays: 3,
+    direction: Direction.BOTH,
+  });
+
+  const allowsLong = (params) => params.direction !== Direction.SHORT;
+  const allowsShort = (params) => params.direction !== Direction.LONG;
 
   /** 計算整段資料的指標 */
   function buildMarket(bars, params) {
@@ -84,6 +98,9 @@
     if (errors.length === 0 && params.maShort >= params.maLong) {
       errors.push('短均線天數必須小於長均線天數');
     }
+    if (!Object.values(Direction).includes(params.direction)) {
+      errors.push('請選擇交易方向');
+    }
     return errors;
   }
 
@@ -91,9 +108,10 @@
 
   /**
    * 依第 t 日收盤資料與目前部位，判斷隔日動作。
+   * capIndex：部位加到口數上限的那根 K 棒索引（未滿上限時為 null），用來計算減碼保護期。
    * 回傳 { action, reason, groups, note }，groups 為逐條規則的檢查結果，供畫面顯示。
    */
-  function evaluate(market, t, position, params) {
+  function evaluate(market, t, position, params, capIndex = null) {
     const s = market.maShort[t];
     const l = market.maLong[t];
     const h = market.hist[t];
@@ -123,8 +141,8 @@
 
     if (side === 0) {
       const groups = [
-        group('enterLong', '多單進場', [bull, histUp]),
-        group('enterShort', '空單進場', [bear, histDown]),
+        group('enterLong', '多單進場', [bull, histUp], allowsLong(params), '本局只作空，不做多單'),
+        group('enterShort', '空單進場', [bear, histDown], allowsShort(params), '本局只作多，不做空單'),
       ];
       if (groups[0].met) return { action: Action.LONG, reason: '多單進場 1 口', groups, note: null };
       if (groups[1].met) return { action: Action.SHORT, reason: '空單進場 1 口', groups, note: null };
@@ -140,16 +158,24 @@
       ? { text: `柱狀圖 ${fmt(h)} 未突破前 ${n} 日最高 ${fmt(extreme)}`, pass: h <= extreme }
       : { text: `柱狀圖 ${fmt(h)} 未跌破前 ${n} 日最低 ${fmt(extreme)}`, pass: h >= extreme };
     const atCap = size >= params.maxLots;
+    // 加到上限那根 K 棒為第 1 根，前 N 根為保護期；第 N+1 根收盤起才檢查減碼
+    const barsAtCap = atCap && capIndex !== null ? t - capIndex + 1 : null;
+    const inGrace = barsAtCap !== null && barsAtCap <= n;
+    const reduceNote = !atCap
+      ? `未達 ${params.maxLots} 口上限，不檢查減碼`
+      : `滿 ${params.maxLots} 口保護期第 ${barsAtCap} 根（共 ${n} 根），第 ${n + 1} 根收盤起才檢查減碼`;
 
     const groups = [
       group('exit', `${sideName}出場`, [isLong ? bear : bull]),
-      group('reduce', '減碼 1 口', [failBreak], atCap, `未達 ${params.maxLots} 口上限，不檢查減碼`),
+      group('reduce', '減碼 1 口', [failBreak], atCap && !inGrace, reduceNote),
       group('add', '加碼 1 口', [isLong ? histUp : histDown], !atCap, `已達 ${params.maxLots} 口上限，不再加碼`),
     ];
 
     if (groups[0].met) {
       // 出場當日即使符合反向進場條件，也只平倉
-      const reverse = isLong ? bear.pass && histDown.pass : bull.pass && histUp.pass;
+      const reverse = isLong
+        ? allowsShort(params) && bear.pass && histDown.pass
+        : allowsLong(params) && bull.pass && histUp.pass;
       const note = reverse
         ? `今日也符合${isLong ? '空單' : '多單'}進場條件，但出場當日只平倉、不反向進場，明日收盤再判斷。`
         : null;
@@ -162,6 +188,8 @@
 
   const Strategy = {
     Action,
+    Direction,
+    DIRECTION_LABELS,
     LIMITS,
     DEFAULT_PARAMS,
     MACD_PARAMS,

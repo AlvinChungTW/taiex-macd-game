@@ -43,6 +43,14 @@
         <span>減碼 N 日</span>
         <input type="number" id="reduceDays" step="1" inputmode="numeric" required>
       </label>
+      <fieldset class="field direction">
+        <legend>交易方向</legend>
+        <div class="segmented">
+          <label><input type="radio" name="direction" value="long"><span>作多</span></label>
+          <label><input type="radio" name="direction" value="short"><span>作空</span></label>
+          <label><input type="radio" name="direction" value="both" checked><span>多空均作</span></label>
+        </div>
+      </fieldset>
       <button type="submit" class="btn primary">以此設定開始</button>
       <p id="settingsError" class="settings-error" role="alert"></p>
     </form>
@@ -179,6 +187,8 @@
           <dd>不計滑價，假設每筆委託都能以次日開盤價全數成交，開盤跳空時也一樣。</dd>
           <dt>資金與保證金</dt>
           <dd>不考慮本金、保證金與追繳，可持有的部位只受「口數上限」限制。</dd>
+          <dt>交易方向</dt>
+          <dd>本局設定為「<span id="envDirection"></span>」。可在上方選擇作多、作空或多空均作，玩家與策略都只能做開放的方向。</dd>
           <dt>部位規則</dt>
           <dd>同一時間只持有單一方向，要反向操作必須先平倉；減碼時先平最早進場的一口（先進先出）。</dd>
           <dt>未平倉部位</dt>

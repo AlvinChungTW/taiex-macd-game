@@ -66,6 +66,39 @@ test('持多滿上限：柱狀圖未突破前 3 日最高 → 減碼', () => {
   assert.equal(Strategy.evaluate(m, 4, 3, PARAMS).action, Action.REDUCE);
 });
 
+test('滿上限保護期：加到上限那根起的 3 根 K 棒不檢查減碼', () => {
+  const m = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [0, 5, 3, 4, 4.5] });
+  // 第 4 天才加到 3 口（第 1 根）、第 2 天加到（第 3 根）：都在保護期內
+  for (const capIndex of [4, 3, 2]) {
+    const d = Strategy.evaluate(m, 4, 3, PARAMS, capIndex);
+    assert.equal(d.action, Action.NONE);
+    assert.equal(d.groups.find((g) => g.id === 'reduce').applicable, false);
+  }
+  // 第 1 天加到 3 口，第 4 天為第 4 根：開始檢查，未突破前 3 根最高 → 減碼
+  assert.equal(Strategy.evaluate(m, 4, 3, PARAMS, 1).action, Action.REDUCE);
+});
+
+test('保護期內仍會出場', () => {
+  const m = fakeMarket({ maShort: [0, 0, 0, 0, 9], maLong: [0, 0, 0, 0, 10], hist: [0, 5, 3, 4, 4.5] });
+  assert.equal(Strategy.evaluate(m, 4, 3, PARAMS, 4).action, Action.CLOSE);
+});
+
+test('只作多：符合空單條件也不進場；只作空：符合多單條件也不進場', () => {
+  const bear = fakeMarket({ maShort: [0, 0, 0, 0, 9], maLong: [0, 0, 0, 0, 10], hist: [0, 0, 0, 2, 1] });
+  const bull = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [0, 0, 0, 1, 2] });
+  assert.equal(Strategy.evaluate(bear, 4, 0, { ...PARAMS, direction: 'long' }).action, Action.NONE);
+  assert.equal(Strategy.evaluate(bull, 4, 0, { ...PARAMS, direction: 'long' }).action, Action.LONG);
+  assert.equal(Strategy.evaluate(bull, 4, 0, { ...PARAMS, direction: 'short' }).action, Action.NONE);
+  assert.equal(Strategy.evaluate(bear, 4, 0, { ...PARAMS, direction: 'short' }).action, Action.SHORT);
+});
+
+test('只作多：多單出場時不提示反向進場', () => {
+  const m = fakeMarket({ maShort: [0, 0, 0, 0, 9], maLong: [0, 0, 0, 0, 10], hist: [0, 5, 3, 4, 1] });
+  const d = Strategy.evaluate(m, 4, 2, { ...PARAMS, direction: 'long' });
+  assert.equal(d.action, Action.CLOSE);
+  assert.equal(d.note, null);
+});
+
 test('持多滿上限：柱狀圖突破前 3 日最高 → 續抱', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [9, 5, 3, 4, 6] });
   assert.equal(Strategy.evaluate(m, 4, 3, PARAMS).action, Action.NONE);
@@ -111,6 +144,23 @@ test('帳戶：持多時不能做空、不能超過上限', () => {
   assert.equal(a.canApply(Action.LONG), false);
 });
 
+test('帳戶：記錄加到上限的 K 棒，減碼後清除', () => {
+  const a = new Account(2);
+  a.apply(Action.LONG, 100, 'd1', 10);
+  assert.equal(a.capIndex, null);
+  a.apply(Action.LONG, 100, 'd2', 11);
+  assert.equal(a.capIndex, 11);
+  a.apply(Action.REDUCE, 100, 'd3', 12);
+  assert.equal(a.capIndex, null);
+});
+
+test('帳戶：交易方向限制', () => {
+  assert.equal(new Account(3, 'long').canApply(Action.SHORT), false);
+  assert.equal(new Account(3, 'long').canApply(Action.LONG), true);
+  assert.equal(new Account(3, 'short').canApply(Action.LONG), false);
+  assert.equal(new Account(3, 'short').canApply(Action.SHORT), true);
+});
+
 test('真實資料：玩家完全照策略提示操作，結果與策略對照組一致', () => {
   const bars = loadRealBars();
   const market = Strategy.buildMarket(bars, PARAMS);
@@ -122,6 +172,43 @@ test('真實資料：玩家完全照策略提示操作，結果與策略對照�
   assert.equal(game.player.position, game.strategy.position);
   assert.ok(Math.abs(game.player.equity(game.bar.close) - game.strategy.equity(game.bar.close)) < 1e-6);
   assert.ok(game.strategy.trades.length > 0);
+});
+
+test('真實資料：滿上限後至少持有 N+1 根 K 棒才減碼', () => {
+  const bars = loadRealBars();
+  const market = Strategy.buildMarket(bars, PARAMS);
+  const game = new Game(market, PARAMS, market.minStartIndex, bars.length - 1);
+  let capAt = null;
+  let reduces = 0;
+  while (!game.finished) {
+    const before = game.strategy.size;
+    game.step(game.coach().action);
+    const s = game.strategy;
+    if (s.size === PARAMS.maxLots && before < PARAMS.maxLots) capAt = game.t;
+    if (before === PARAMS.maxLots && s.size === PARAMS.maxLots - 1) {
+      reduces++;
+      assert.ok(game.t - capAt >= PARAMS.reduceDays + 1, `${game.bar.date} 在保護期內減碼`);
+    }
+  }
+  assert.ok(reduces > 0);
+});
+
+test('真實資料：只作多時不會持有空單，只作空時不會持有多單', () => {
+  const bars = loadRealBars();
+  for (const direction of ['long', 'short']) {
+    const params = { ...PARAMS, direction };
+    const market = Strategy.buildMarket(bars, params);
+    const game = new Game(market, params, market.minStartIndex, bars.length - 1);
+    let traded = false;
+    while (!game.finished) {
+      game.step(game.coach().action);
+      const p = game.strategy.position;
+      if (p !== 0) traded = true;
+      assert.ok(direction === 'long' ? p >= 0 : p <= 0);
+      assert.equal(p, game.player.position);
+    }
+    assert.ok(traded);
+  }
 });
 
 test('真實資料：回到前一天可還原狀態', () => {
@@ -140,4 +227,5 @@ test('參數驗證', () => {
   assert.ok(Strategy.validateParams({ ...PARAMS, maShort: 20, maLong: 5 }).length > 0);
   assert.ok(Strategy.validateParams({ ...PARAMS, maxLots: 1 }).length > 0);
   assert.ok(Strategy.validateParams({ ...PARAMS, reduceDays: 2.5 }).length > 0);
+  assert.ok(Strategy.validateParams({ ...PARAMS, direction: 'sideways' }).length > 0);
 });
