@@ -114,7 +114,7 @@
           </thead>
           <tbody id="accountBody"></tbody>
         </table>
-        <p class="unit">單位：點（點數 × 口數，不含交易成本）</p>
+        <p class="unit">單位：點（1 點 = 1 元，點數 × 口數，不含手續費與稅費）</p>
       </section>
     </aside>
 
@@ -123,6 +123,7 @@
         <button type="button" role="tab" id="tab-daily" aria-controls="panel-daily" aria-selected="true">每日損益</button>
         <button type="button" role="tab" id="tab-trades" aria-controls="panel-trades" aria-selected="false" tabindex="-1">交易紀錄</button>
         <button type="button" role="tab" id="tab-equity" aria-controls="panel-equity" aria-selected="false" tabindex="-1">損益曲線</button>
+        <button type="button" role="tab" id="tab-env" aria-controls="panel-env" aria-selected="false" tabindex="-1">投資環境</button>
         <button type="button" role="tab" id="tab-rules" aria-controls="panel-rules" aria-selected="false" tabindex="-1">策略規則</button>
       </div>
 
@@ -164,9 +165,34 @@
         <div id="equityChart" class="chart equity"></div>
       </div>
 
+      <div role="tabpanel" id="panel-env" aria-labelledby="tab-env" class="tab-panel" hidden>
+        <dl class="env-list">
+          <dt>標的</dt>
+          <dd>臺灣加權股價指數（TAIEX）。直接使用指數點位，不是台指期價格，因此沒有期現貨價差、到期結算與轉倉的問題。</dd>
+          <dt>點值</dt>
+          <dd>1 點 = 1 元。損益 = 點數變化 × 口數。</dd>
+          <dt>交易成本</dt>
+          <dd>不包含手續費、稅費。</dd>
+          <dt>成交方式</dt>
+          <dd>僅以每日收盤價作為判斷依據，符合條件時次日以開盤價成交。</dd>
+          <dt>滑價</dt>
+          <dd>不計滑價，假設每筆委託都能以次日開盤價全數成交，開盤跳空時也一樣。</dd>
+          <dt>資金與保證金</dt>
+          <dd>不考慮本金、保證金與追繳，可持有的部位只受「口數上限」限制。</dd>
+          <dt>部位規則</dt>
+          <dd>同一時間只持有單一方向，要反向操作必須先平倉；減碼時先平最早進場的一口（先進先出）。</dd>
+          <dt>未平倉部位</dt>
+          <dd>每天以收盤價計算未實現損益；到結束日仍未平倉的部位，以最後一天的收盤價結算。</dd>
+          <dt>指標計算</dt>
+          <dd>均線為簡單移動平均（SMA）；MACD 參數 12 / 26 / 9，以指數移動平均（EMA）計算，柱狀圖 = DIF − DEA。起始日之前的歷史行情只用來先算好指標，畫面上看不到未來的行情。</dd>
+          <dt>資料來源</dt>
+          <dd>臺灣證券交易所加權指數日線（<span id="envDataRange"></span>），休市日沒有資料。</dd>
+        </dl>
+      </div>
+
       <div role="tabpanel" id="panel-rules" aria-labelledby="tab-rules" class="tab-panel" hidden>
         <ol class="rule-list" id="ruleList"></ol>
-        <p class="muted">MACD 參數固定為 12 / 26 / 9，柱狀體 = DIF − DEA。每天收盤後判斷，隔日開盤價成交。</p>
+        <p class="muted">柱狀圖 = DIF − DEA。點值、交易成本與成交方式請見「投資環境」分頁。</p>
       </div>
     </section>
   </main>

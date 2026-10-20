@@ -33,7 +33,7 @@ test('EMA 以簡單平均起始並遞推', () => {
   assert.equal(out[3], 4 * 0.5 + 2 * 0.5);
 });
 
-test('MACD 柱狀體 = DIF − DEA', () => {
+test('MACD 柱狀圖 = DIF − DEA', () => {
   const closes = Array.from({ length: 80 }, (_, i) => 100 + Math.sin(i / 5) * 10);
   const { dif, dea, hist } = Indicators.macd(closes);
   assert.equal(hist[32], null);
@@ -41,37 +41,37 @@ test('MACD 柱狀體 = DIF − DEA', () => {
   assert.ok(Math.abs(hist[50] - (dif[50] - dea[50])) < 1e-12);
 });
 
-test('空手：短均線在上且柱狀體走高 → 多單進場', () => {
+test('空手：短均線在上且柱狀圖走高 → 多單進場', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [0, 0, 0, 1, 2] });
   assert.equal(Strategy.evaluate(m, 4, 0, PARAMS).action, Action.LONG);
 });
 
-test('空手：短均線在上但柱狀體走低 → 不進場', () => {
+test('空手：短均線在上但柱狀圖走低 → 不進場', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [0, 0, 0, 2, 1] });
   assert.equal(Strategy.evaluate(m, 4, 0, PARAMS).action, Action.NONE);
 });
 
-test('空手：短均線在下且柱狀體走低 → 空單進場', () => {
+test('空手：短均線在下且柱狀圖走低 → 空單進場', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 9], maLong: [0, 0, 0, 0, 10], hist: [0, 0, 0, 2, 1] });
   assert.equal(Strategy.evaluate(m, 4, 0, PARAMS).action, Action.SHORT);
 });
 
-test('持多未滿上限：柱狀體走高 → 加碼', () => {
+test('持多未滿上限：柱狀圖走高 → 加碼', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [5, 5, 5, 1, 2] });
   assert.equal(Strategy.evaluate(m, 4, 2, PARAMS).action, Action.LONG);
 });
 
-test('持多滿上限：柱狀體未突破前 3 日最高 → 減碼', () => {
+test('持多滿上限：柱狀圖未突破前 3 日最高 → 減碼', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [0, 5, 3, 4, 4.5] });
   assert.equal(Strategy.evaluate(m, 4, 3, PARAMS).action, Action.REDUCE);
 });
 
-test('持多滿上限：柱狀體突破前 3 日最高 → 續抱', () => {
+test('持多滿上限：柱狀圖突破前 3 日最高 → 續抱', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [9, 5, 3, 4, 6] });
   assert.equal(Strategy.evaluate(m, 4, 3, PARAMS).action, Action.NONE);
 });
 
-test('持多 2 口：柱狀體走低也不減碼', () => {
+test('持多 2 口：柱狀圖走低也不減碼', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 11], maLong: [0, 0, 0, 0, 10], hist: [0, 5, 3, 4, 1] });
   assert.equal(Strategy.evaluate(m, 4, 2, PARAMS).action, Action.NONE);
 });
@@ -83,7 +83,7 @@ test('出場優先於減碼；出場當日符合空單條件也只平倉', () =>
   assert.ok(d.note);
 });
 
-test('空單鏡像：滿上限且柱狀體未跌破前 3 日最低 → 減碼', () => {
+test('空單鏡像：滿上限且柱狀圖未跌破前 3 日最低 → 減碼', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 9], maLong: [0, 0, 0, 0, 10], hist: [0, -5, -3, -4, -4.5] });
   assert.equal(Strategy.evaluate(m, 4, -3, PARAMS).action, Action.REDUCE);
 });

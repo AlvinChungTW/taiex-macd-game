@@ -5,9 +5,9 @@
  * 部位以帶正負號的整數表示：+n 為 n 口多單，−n 為 n 口空單，0 為空手。
  *
  * 規則（多單；空單全部相反）：
- *   進場：短均線 > 長均線，且 MACD 柱狀體 > 昨日          → 隔日多單 1 口
- *   加碼：持有多單且未達口數上限，柱狀體 > 前一日          → 隔日加碼 1 口
- *   減碼：達口數上限時，柱狀體未突破前 N 日最高值          → 隔日減碼 1 口
+ *   進場：短均線 > 長均線，且 MACD 柱狀圖 > 昨日          → 隔日多單 1 口
+ *   加碼：持有多單且未達口數上限，柱狀圖 > 前一日          → 隔日加碼 1 口
+ *   減碼：達口數上限時，柱狀圖未突破前 N 日最高值          → 隔日減碼 1 口
  *   出場：短均線 < 長均線                                  → 隔日全部平倉
  *   同日多個訊號時優先序：出場 > 減碼 > 加碼。
  *   出場當日即使符合反向進場條件也只平倉，隔日收盤再重新判斷。
@@ -109,8 +109,8 @@
 
     const bull = { text: `${sName} ${fmt(s)} > ${lName} ${fmt(l)}`, pass: s > l };
     const bear = { text: `${sName} ${fmt(s)} < ${lName} ${fmt(l)}`, pass: s < l };
-    const histUp = { text: `柱狀體 ${fmt(h)} > 昨日 ${fmt(hPrev)}`, pass: h > hPrev };
-    const histDown = { text: `柱狀體 ${fmt(h)} < 昨日 ${fmt(hPrev)}`, pass: h < hPrev };
+    const histUp = { text: `柱狀圖 ${fmt(h)} > 昨日 ${fmt(hPrev)}`, pass: h > hPrev };
+    const histDown = { text: `柱狀圖 ${fmt(h)} < 昨日 ${fmt(hPrev)}`, pass: h < hPrev };
 
     const group = (id, title, conditions, applicable = true, skipNote = null) => ({
       id,
@@ -137,8 +137,8 @@
     const recent = market.hist.slice(t - n, t);
     const extreme = isLong ? Math.max(...recent) : Math.min(...recent);
     const failBreak = isLong
-      ? { text: `柱狀體 ${fmt(h)} 未突破前 ${n} 日最高 ${fmt(extreme)}`, pass: h <= extreme }
-      : { text: `柱狀體 ${fmt(h)} 未跌破前 ${n} 日最低 ${fmt(extreme)}`, pass: h >= extreme };
+      ? { text: `柱狀圖 ${fmt(h)} 未突破前 ${n} 日最高 ${fmt(extreme)}`, pass: h <= extreme }
+      : { text: `柱狀圖 ${fmt(h)} 未跌破前 ${n} 日最低 ${fmt(extreme)}`, pass: h >= extreme };
     const atCap = size >= params.maxLots;
 
     const groups = [

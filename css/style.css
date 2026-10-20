@@ -184,6 +184,8 @@ kbd {
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
+  /* 右側面板跨兩列且較高，多出的高度全部給第二列，圖表與紀錄之間才不會被撐開 */
+  grid-template-rows: auto 1fr;
   grid-template-areas:
     "charts panel"
     "records panel";
@@ -389,6 +391,15 @@ kbd {
 .rule-list { margin: 0 0 0.75rem; padding-left: 1.5rem; max-width: 72ch; }
 .rule-list li { margin-bottom: 0.35rem; }
 
+.env-list { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 72ch); gap: 0.5rem 1.5rem; }
+.env-list dt { font-weight: 500; color: var(--ink); }
+.env-list dd { margin: 0; color: var(--ink-2); }
+
+@media (max-width: 560px) {
+  .env-list { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
+  .env-list dd { margin-bottom: 0.5rem; }
+}
+
 /* ---------- 頁尾 ---------- */
 .footer { padding: 0.5rem 1.5rem 2rem; font-size: 0.8125rem; color: var(--muted); display: flex; flex-direction: column; gap: 0.25rem; }
 .footer a { color: var(--ink-2); }
@@ -412,6 +423,7 @@ kbd {
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
     grid-template-areas: "charts" "panel" "records";
     padding: 1rem;
   }

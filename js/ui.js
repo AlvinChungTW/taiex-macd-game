@@ -356,7 +356,7 @@
       legendItem('MACD 12, 26, 9', '', null),
       legendItem('DIF', fmtPrice(market.dif[i]), 'ma-short'),
       legendItem('DEA', fmtPrice(market.dea[i]), 'ma-long'),
-      legendItem('柱狀體', fmtSigned(market.hist[i]))
+      legendItem('柱狀圖', fmtSigned(market.hist[i]))
     );
   }
 
@@ -528,13 +528,13 @@
     const { maShort: s, maLong: l, maxLots: cap, reduceDays: n } = state.params;
     const rules = [
       `同時間最多持有 ${cap} 口，多單、空單都做（同一時間只持有單一方向）。`,
-      `多單進場：收盤時 ${s}MA 在 ${l}MA 之上，且 MACD 柱狀體大於昨日，隔日開盤做多 1 口。`,
-      `多單加碼：持有多單且未滿 ${cap} 口時，收盤柱狀體大於前一日，隔日加碼 1 口。`,
-      `減碼：持有 ${cap} 口時，若收盤柱狀體未突破前 ${n} 日最高值，隔日減碼 1 口（先平最早進場的一口）。`,
+      `多單進場：收盤時 ${s}MA 在 ${l}MA 之上，且 MACD 柱狀圖大於昨日，隔日開盤做多 1 口。`,
+      `多單加碼：持有多單且未滿 ${cap} 口時，收盤柱狀圖大於前一日，隔日加碼 1 口。`,
+      `減碼：持有 ${cap} 口時，若收盤柱狀圖未突破前 ${n} 日最高值，隔日減碼 1 口（先平最早進場的一口）。`,
       `減碼只在滿 ${cap} 口時才檢查，未滿上限不減碼。`,
       '減碼後若符合加碼條件，照樣再加碼。',
       `多單出場：收盤時 ${s}MA 跌破 ${l}MA，隔日全部平倉。`,
-      `空單規則與多單相反：${s}MA 在 ${l}MA 之下且柱狀體小於昨日時進場；柱狀體小於前一日時加碼；滿 ${cap} 口且柱狀體未跌破前 ${n} 日最低值時減碼；${s}MA 突破 ${l}MA 時出場。`,
+      `空單規則與多單相反：${s}MA 在 ${l}MA 之下且柱狀圖小於昨日時進場；柱狀圖小於前一日時加碼；滿 ${cap} 口且柱狀圖未跌破前 ${n} 日最低值時減碼；${s}MA 突破 ${l}MA 時出場。`,
       '出場當日即使符合反向進場條件，也只平倉、不反手，隔日收盤再重新判斷。同一天有多個訊號時，優先序為出場、減碼、加碼。',
     ];
     $('ruleList').replaceChildren(...rules.map((text) => el('li', { text })));
@@ -787,6 +787,7 @@
   // ---------- 啟動 ----------
   loadTheme();
   $('dataRange').textContent = `${bars[0].date} 至 ${bars[lastIndex].date}`;
+  $('envDataRange').textContent = `${bars[0].date} 至 ${bars[lastIndex].date}`;
   createCharts();
   initSettings();
   initTabs();

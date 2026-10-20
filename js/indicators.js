@@ -39,7 +39,7 @@
   }
 
   /**
-   * MACD：DIF = EMA(fast) − EMA(slow)，DEA = EMA(DIF, signal)，柱狀體 = DIF − DEA。
+   * MACD：DIF = EMA(fast) − EMA(slow)，DEA = EMA(DIF, signal)，柱狀圖 = DIF − DEA。
    */
   function macd(closes, fast = 12, slow = 26, signal = 9) {
     const emaFast = ema(closes, fast);
