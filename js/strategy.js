@@ -11,7 +11,7 @@
  *         加到上限那根 K 棒算第 1 根，前 N 根為保護期不檢查，第 N+1 根收盤起才檢查
  *   出場：短均線 < 長均線                                  → 隔日全部平倉
  *   同日多個訊號時優先序：出場 > 減碼 > 加碼。
- *   出場當日即使符合反向進場條件也只平倉，隔日收盤再重新判斷。
+ *   出場當日若同時符合反向進場條件，隔日開盤全部平倉並立即反向進場 1 口（反手）。
  *   交易方向可設定為只作多、只作空或多空均作，未開放的方向不進場。
  */
 (function (root) {
@@ -30,6 +30,7 @@
     SHORT: 'short', // 空單進場或加碼 1 口
     REDUCE: 'reduce', // 減碼 1 口（先平最早進場的一口）
     CLOSE: 'close', // 全部平倉
+    REVERSE: 'reverse', // 全部平倉，並以同一個開盤價反向進場 1 口
   });
 
   const LIMITS = Object.freeze({
@@ -172,14 +173,16 @@
     ];
 
     if (groups[0].met) {
-      // 出場當日即使符合反向進場條件，也只平倉
+      // 出場當日若同時符合反向進場條件（且交易方向允許），平倉並反手 1 口
+      const otherName = isLong ? '空單' : '多單';
       const reverse = isLong
         ? allowsShort(params) && bear.pass && histDown.pass
         : allowsLong(params) && bull.pass && histUp.pass;
-      const note = reverse
-        ? `今日也符合${isLong ? '空單' : '多單'}進場條件，但出場當日只平倉、不反向進場，明日收盤再判斷。`
-        : null;
-      return { action: Action.CLOSE, reason: `${sideName}全部平倉`, groups, note };
+      if (reverse) {
+        const note = `今日也符合${otherName}進場條件，明日開盤全部平倉，並以同一個開盤價反向進場 1 口${otherName}。`;
+        return { action: Action.REVERSE, reason: `${sideName}平倉並反向 1 口`, groups, note };
+      }
+      return { action: Action.CLOSE, reason: `${sideName}全部平倉`, groups, note: null };
     }
     if (groups[1].met) return { action: Action.REDUCE, reason: `${sideName}減碼 1 口`, groups, note: null };
     if (groups[2].met) return { action: isLong ? Action.LONG : Action.SHORT, reason: `${sideName}加碼 1 口`, groups, note: null };

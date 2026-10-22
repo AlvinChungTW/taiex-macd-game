@@ -56,6 +56,11 @@
         case Action.REDUCE:
         case Action.CLOSE:
           return this.size > 0;
+        case Action.REVERSE:
+          // 持有部位，且交易方向允許反向的那一邊
+          return this.side > 0
+            ? this.direction !== Strategy.Direction.LONG
+            : this.side < 0 && this.direction !== Strategy.Direction.SHORT;
         default:
           return false;
       }
@@ -65,6 +70,13 @@
     apply(action, price, date, index = null) {
       if (action === Action.NONE) return null;
       if (!this.canApply(action)) throw new Error(`目前部位無法執行：${action}`);
+
+      if (action === Action.REVERSE) {
+        // 反手：先全部平倉，再以同一價格反向進場 1 口，交易紀錄會有兩筆
+        const opposite = this.side > 0 ? Action.SHORT : Action.LONG;
+        this.apply(Action.CLOSE, price, date, index);
+        return this.apply(opposite, price, date, index);
+      }
 
       if (action === Action.LONG || action === Action.SHORT) {
         const side = action === Action.LONG ? 1 : -1;
@@ -144,7 +156,7 @@
       this.t = startIndex;
       this.player = new Account(params.maxLots, params.direction);
       this.strategy = new Account(params.maxLots, params.direction);
-      this.rows = [this._row(null, null)];
+      this.rows = [this._row([], [])];
       this.history = [];
     }
 
@@ -191,9 +203,15 @@
       const strategyAction = this.strategyDecision().action;
       this.t += 1;
       const { date, open } = this.bar;
-      const playerTrade = this.player.apply(playerAction, open, date, this.t);
-      const strategyTrade = this.strategy.apply(strategyAction, open, date, this.t);
-      this.rows.push(this._row(playerTrade, strategyTrade));
+      // 一天可能有兩筆成交（反手），以成交前後的筆數差取出當天的交易
+      const executed = (account, action) => {
+        const before = account.trades.length;
+        account.apply(action, open, date, this.t);
+        return account.trades.slice(before);
+      };
+      const playerTrades = executed(this.player, playerAction);
+      const strategyTrades = executed(this.strategy, strategyAction);
+      this.rows.push(this._row(playerTrades, strategyTrades));
     }
 
     /** 回到前一天 */
@@ -207,7 +225,7 @@
       return true;
     }
 
-    _row(playerTrade, strategyTrade) {
+    _row(playerTrades, strategyTrades) {
       const { date, close } = this.bar;
       const prev = this.rows ? this.rows[this.rows.length - 1] : null;
       const playerEquity = this.player.equity(close);
@@ -215,8 +233,8 @@
       return {
         date,
         close,
-        playerTrade,
-        strategyTrade,
+        playerTrades,
+        strategyTrades,
         playerPosition: this.player.position,
         playerEquity,
         playerDaily: prev ? playerEquity - prev.playerEquity : 0,

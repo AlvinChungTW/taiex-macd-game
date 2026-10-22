@@ -109,7 +109,8 @@
           <button type="button" role="radio" data-action="short"><span class="label"></span><kbd>2</kbd></button>
           <button type="button" role="radio" data-action="reduce"><span class="label">減碼 1 口</span><kbd>3</kbd></button>
           <button type="button" role="radio" data-action="close"><span class="label">全部平倉</span><kbd>4</kbd></button>
-          <button type="button" role="radio" data-action="none" class="wide"><span class="label">不動作</span><kbd>0</kbd></button>
+          <button type="button" role="radio" data-action="none"><span class="label">不動作</span><kbd>0</kbd></button>
+          <button type="button" role="radio" data-action="reverse"><span class="label">平倉並反向 1 口</span><kbd>5</kbd></button>
         </div>
         <button type="button" id="followBtn" class="btn ghost follow">照策略建議 <kbd>F</kbd></button>
         <p class="pending" id="pending"></p>
@@ -195,7 +196,9 @@
           <dt>交易方向</dt>
           <dd>本局設定為「<span id="envDirection"></span>」。可在上方選擇作多、作空或多空均作，玩家與策略都只能做開放的方向。</dd>
           <dt>部位規則</dt>
-          <dd>同一時間只持有單一方向，要反向操作必須先平倉；減碼時先平最早進場的一口（先進先出）。</dd>
+          <dd>同一時間只持有單一方向；減碼時先平最早進場的一口（先進先出）。</dd>
+          <dt>反手</dt>
+          <dd>出場訊號出現當天，若同時符合反向進場條件，次日開盤全部平倉，並以同一個開盤價反向進場 1 口（下單時按「平倉並反向 1 口」）。交易方向沒有開放該方向時只平倉。</dd>
           <dt>未平倉部位</dt>
           <dd>每天以收盤價計算未實現損益；到結束日仍未平倉的部位，以最後一天的收盤價結算。</dd>
           <dt>指標計算</dt>
@@ -213,7 +216,7 @@
   </main>
 
   <footer class="footer">
-    <p>快捷鍵：<kbd>→</kbd> 或 <kbd>空白鍵</kbd> 下一天、<kbd>←</kbd> 上一天、<kbd>1</kbd>～<kbd>4</kbd>、<kbd>0</kbd> 選擇動作、<kbd>F</kbd> 照策略建議、<kbd>H</kbd> 顯示／隱藏策略提示</p>
+    <p>快捷鍵：<kbd>→</kbd> 或 <kbd>空白鍵</kbd> 下一天、<kbd>←</kbd> 上一天、<kbd>1</kbd>～<kbd>5</kbd>、<kbd>0</kbd> 選擇動作、<kbd>F</kbd> 照策略建議、<kbd>H</kbd> 顯示／隱藏策略提示</p>
     <p>資料來源：臺灣證券交易所（加權指數日線，<span id="dataRange"></span>）。本專案僅供教學與展示，不構成任何投資建議。</p>
     <p>圖表：<a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts™</a>，Copyright (с) 2025 TradingView, Inc.</p>
   </footer>

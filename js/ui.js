@@ -57,6 +57,8 @@
         return '減碼 1 口';
       case Action.CLOSE:
         return '全部平倉';
+      case Action.REVERSE:
+        return position > 0 ? '全部平倉並反向做空 1 口' : position < 0 ? '全部平倉並反向做多 1 口' : '平倉並反向 1 口';
       default:
         return '不動作';
     }
@@ -67,6 +69,9 @@
     const side = trade.side > 0 ? '多單' : '空單';
     return `${side}${trade.kind}${trade.count > 1 ? ` ${trade.count} 口` : ''}`;
   }
+
+  /** 一天的成交（反手時有兩筆）合併成一段文字 */
+  const tradesText = (trades) => (trades.length ? trades.map(tradeText).join(' → ') : '—');
 
   const RULE_REFS = {
     enterLong: '規則 2',
@@ -480,7 +485,7 @@
       );
     }
     $('ruleNote').hidden = !decision.note;
-    $('ruleNote').textContent = decision.note ? `規則 9：${decision.note}` : '';
+    $('ruleNote').textContent = decision.note ? `規則 9（反手）：${decision.note}` : '';
   }
 
   function renderOrder() {
@@ -544,11 +549,11 @@
     return el('tr', {}, [
       el('td', { class: 'text', text: r.date }),
       el('td', { text: fmtPrice(r.close) }),
-      el('td', { class: 'text', text: first ? '起始日' : tradeText(r.playerTrade) }),
+      el('td', { class: 'text', text: first ? '起始日' : tradesText(r.playerTrades) }),
       el('td', { class: 'text', text: fmtPosition(r.playerPosition) }),
       el('td', { class: signClass(r.playerDaily), text: fmtSigned(r.playerDaily) }),
       el('td', { class: signClass(r.playerEquity), text: fmtSigned(r.playerEquity) }),
-      el('td', { class: 'text', text: first ? '起始日' : tradeText(r.strategyTrade) }),
+      el('td', { class: 'text', text: first ? '起始日' : tradesText(r.strategyTrades) }),
       el('td', { class: 'text', text: fmtPosition(r.strategyPosition) }),
       el('td', { class: signClass(r.strategyDaily), text: fmtSigned(r.strategyDaily) }),
       el('td', { class: signClass(r.strategyEquity), text: fmtSigned(r.strategyEquity) }),
@@ -593,10 +598,10 @@
     rendered.player = Math.min(rendered.player, player.trades.length);
     rendered.strategy = Math.min(rendered.strategy, strategy.trades.length);
 
-    // 往後走一天：新交易同一天，玩家在前，插在最上方
+    // 往後走一天：新交易同一天，玩家在前；同一帳戶反手的兩筆，較新的（反向進場）在上
     const fresh = [
-      ...player.trades.slice(rendered.player).map((t) => tradeRow(t, '你')),
-      ...strategy.trades.slice(rendered.strategy).map((t) => tradeRow(t, '策略')),
+      ...player.trades.slice(rendered.player).reverse().map((t) => tradeRow(t, '你')),
+      ...strategy.trades.slice(rendered.strategy).reverse().map((t) => tradeRow(t, '策略')),
     ];
     if (fresh.length) body.prepend(...fresh);
     rendered.player = player.trades.length;
@@ -625,7 +630,7 @@
       `減碼後若符合加碼條件，照樣再加碼；再次加到 ${cap} 口時，保護期重新計算。`,
       `多單出場：收盤時 ${s}MA 跌破 ${l}MA，隔日全部平倉（保護期內也一樣）。`,
       `空單規則與多單相反：${s}MA 在 ${l}MA 之下且柱狀圖小於昨日時進場；柱狀圖小於前一日時加碼；滿 ${cap} 口且過了保護期後，柱狀圖未跌破前 ${n} 日最低值時減碼；${s}MA 突破 ${l}MA 時出場。`,
-      '出場當日即使符合反向進場條件，也只平倉、不反手，隔日收盤再重新判斷。同一天有多個訊號時，優先序為出場、減碼、加碼。',
+      '反手：出場當日若同時符合反向進場條件，隔日開盤全部平倉，並以同一個開盤價反向進場 1 口（交易方向未開放該方向時只平倉）。同一天有多個訊號時，優先序為出場、減碼、加碼。',
     ];
     $('ruleList').replaceChildren(...rules.map((text) => el('li', { text })));
   }
@@ -868,7 +873,14 @@
       startGame(params, game.startIndex, game.endIndex);
     });
 
-    const keyActions = { 1: Action.LONG, 2: Action.SHORT, 3: Action.REDUCE, 4: Action.CLOSE, 0: Action.NONE };
+    const keyActions = {
+      1: Action.LONG,
+      2: Action.SHORT,
+      3: Action.REDUCE,
+      4: Action.CLOSE,
+      5: Action.REVERSE,
+      0: Action.NONE,
+    };
     document.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if ($('summaryDialog').open) return;

@@ -109,11 +109,41 @@ test('持多 2 口：柱狀圖走低也不減碼', () => {
   assert.equal(Strategy.evaluate(m, 4, 2, PARAMS).action, Action.NONE);
 });
 
-test('出場優先於減碼；出場當日符合空單條件也只平倉', () => {
+test('出場優先於減碼；出場當日符合空單條件 → 平倉並反向', () => {
   const m = fakeMarket({ maShort: [0, 0, 0, 0, 9], maLong: [0, 0, 0, 0, 10], hist: [0, 5, 3, 4, 1] });
   const d = Strategy.evaluate(m, 4, 3, PARAMS);
-  assert.equal(d.action, Action.CLOSE);
+  assert.equal(d.action, Action.REVERSE);
   assert.ok(d.note);
+});
+
+test('出場當日不符合反向條件 → 只平倉', () => {
+  // 均線跌破但柱狀圖比昨日大，不符合空單進場
+  const m = fakeMarket({ maShort: [0, 0, 0, 0, 9], maLong: [0, 0, 0, 0, 10], hist: [0, 5, 3, 1, 4] });
+  const d = Strategy.evaluate(m, 4, 2, PARAMS);
+  assert.equal(d.action, Action.CLOSE);
+  assert.equal(d.note, null);
+});
+
+test('帳戶：平倉並反向 1 口', () => {
+  const a = new Account(3);
+  a.apply(Action.LONG, 100, 'd1', 1);
+  a.apply(Action.LONG, 110, 'd2', 2);
+  assert.equal(a.canApply(Action.REVERSE), true);
+  a.apply(Action.REVERSE, 120, 'd3', 3);
+  assert.equal(a.position, -1);
+  assert.equal(a.realized, 30); // (120−100) + (120−110)
+  assert.deepEqual(a.lots, [120]);
+  assert.equal(a.trades.length, 4);
+  assert.equal(a.roundTrips.length, 1);
+  assert.equal(a.openTrip.side, -1);
+  assert.equal(a.unrealized(100), 20);
+  assert.equal(new Account(3).canApply(Action.REVERSE), false); // 空手不能反手
+});
+
+test('帳戶：交易方向未開放反向時不能反手', () => {
+  const a = new Account(3, 'long');
+  a.apply(Action.LONG, 100, 'd1', 1);
+  assert.equal(a.canApply(Action.REVERSE), false);
 });
 
 test('空單鏡像：滿上限且柱狀圖未跌破前 3 日最低 → 減碼', () => {
@@ -227,6 +257,26 @@ test('真實資料：連續多次回到前一天，帳戶狀態與交易紀錄�
     assert.equal(state(), saved[i]);
   }
   assert.equal(game.undo(), false);
+});
+
+test('真實資料：策略會反手，反手當天記錄兩筆成交，部位直接翻向', () => {
+  const bars = loadRealBars();
+  const market = Strategy.buildMarket(bars, PARAMS);
+  const game = new Game(market, PARAMS, market.minStartIndex, bars.length - 1);
+  let reversals = 0;
+  while (!game.finished) {
+    const before = game.strategy.position;
+    const action = game.strategyDecision().action;
+    game.step(action);
+    if (action === Action.REVERSE) {
+      reversals++;
+      const row = game.rows[game.rows.length - 1];
+      assert.equal(row.strategyTrades.length, 2);
+      assert.equal(Math.sign(game.strategy.position), -Math.sign(before));
+      assert.equal(Math.abs(game.strategy.position), 1);
+    }
+  }
+  assert.ok(reversals > 0);
 });
 
 test('真實資料：回到前一天可還原狀態', () => {
